@@ -1,0 +1,1712 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>Monitoraggio Treni</title>
+
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black">
+  <meta name="theme-color" content="#0d1117">
+  <meta name="color-scheme" content="dark light">
+
+  <link rel="manifest" href="manifest.json">
+  <link rel="apple-touch-icon" href="icon.png">
+
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <style>
+    :root {
+      --bg: #0d1117; --panel: #161b22; --panel2: #21262d; --border: #30363d;
+      --text: #c9d1d9; --muted: #8b949e; --blue: #58a6ff; --green: #3fb950;
+      --yellow: #d29922; --red: #ff7b72; --btn-green: #238636; --btn-blue: #1f6feb;
+      --hero: #14233a; --strong: #ffffff;
+    }
+    @media (prefers-color-scheme: light) {
+      :root {
+        --bg: #f6f8fa; --panel: #ffffff; --panel2: #eaeef2; --border: #d0d7de;
+        --text: #1f2328; --muted: #59636e; --blue: #0969da; --green: #1a7f37;
+        --yellow: #9a6700; --red: #cf222e; --btn-green: #1a7f37; --btn-blue: #0969da;
+        --hero: #e3effc; --strong: #1f2328;
+      }
+    }
+    * { -webkit-tap-highlight-color: transparent; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: var(--bg); color: var(--text); margin: 0; padding: 0;
+      padding-bottom: calc(76px + env(safe-area-inset-bottom));
+      touch-action: manipulation;
+    }
+    .view-container { padding: 12px; display: none; flex-direction: column; gap: 14px; width: 100%; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+    .view-container.active { display: flex; }
+    .hidden { display: none !important; }
+
+    .topbar-mini {
+      display: flex; justify-content: space-between; align-items: center;
+      padding: 4px 2px 0;
+    }
+    .topbar-title { font-size: 16px; font-weight: 800; color: var(--strong); letter-spacing: 0.2px; }
+    .btn-cfg {
+      width: auto; padding: 8px 12px; font-size: 14px; border-radius: 10px;
+      background: var(--panel); border: 1px solid var(--border); color: var(--muted);
+    }
+
+    label { font-size: 14px; font-weight: 600; color: var(--muted); }
+    select, input, button {
+      font-size: 16px; padding: 14px 16px; border-radius: 12px; border: 1px solid var(--border);
+      width: 100%; box-sizing: border-box; background-color: var(--panel); color: var(--text);
+      -webkit-appearance: none; appearance: none; outline: none; font-family: inherit;
+    }
+    select:focus, input:focus { border-color: var(--blue); }
+    select:disabled, input:disabled { opacity: 0.5; background-color: var(--panel2); }
+    input[type="time"], input[type="date"], input[type="datetime-local"] { -webkit-appearance: textfield; appearance: textfield; min-height: 50px; }
+    input[type="checkbox"] { width: 20px; height: 20px; padding: 0; margin: 0; -webkit-appearance: checkbox; appearance: checkbox; }
+    button { font-weight: 600; transition: all 0.15s ease; cursor: pointer; }
+    button:active:not(:disabled) { transform: scale(0.98); opacity: 0.85; }
+    button:disabled { background-color: var(--panel2); color: var(--muted); border-color: var(--border); cursor: default; }
+
+    .btn-smart { background-color: var(--panel2); color: var(--blue); padding: 10px 12px; font-size: 13px; }
+    .btn-main {
+      font-size: 18px; padding: 20px 16px; border: 1px solid rgba(240,246,252,0.1); color: #fff;
+      letter-spacing: 0.5px; box-shadow: 0 6px 18px rgba(0,0,0,0.45);
+    }
+    .btn-main.partenza { background-color: var(--btn-green); }
+    .btn-main.arrivo { background-color: var(--btn-blue); }
+    .azione-fissa {
+      position: sticky; bottom: calc(76px + env(safe-area-inset-bottom)); z-index: 50;
+      padding-top: 6px;
+    }
+    .btn-link {
+      background: transparent; border: none; padding: 10px; font-size: 14px; width: auto;
+      color: var(--blue); text-decoration: underline; text-underline-offset: 3px;
+    }
+    .btn-link.danger { color: var(--red); }
+    .azioni-secondarie { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
+
+    #status { font-size: 14px; font-weight: 600; text-align: center; color: var(--muted); min-height: 20px; }
+
+    .box-soppresso { background-color: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 12px; display: flex; flex-direction: column; gap: 10px; }
+    .checkbox-row { display: flex; align-items: center; gap: 10px; cursor: pointer; }
+
+    .viaggio-card {
+      background: linear-gradient(180deg, var(--hero) 0%, var(--panel) 100%);
+      border: 1px solid var(--border); border-radius: 16px; padding: 18px 14px;
+      display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center;
+    }
+    .viaggio-titolo { font-size: 15px; font-weight: 700; color: var(--blue); }
+    .viaggio-percorso { font-size: 14px; color: var(--muted); }
+    .viaggio-timer { font-size: 46px; font-weight: 800; font-variant-numeric: tabular-nums; letter-spacing: 1px; color: var(--strong); margin: 4px 0; }
+    .viaggio-dettaglio { font-size: 13px; color: var(--muted); }
+    .viaggio-ripiego { font-size: 13px; color: var(--yellow); font-weight: 600; }
+
+    .badge { display: inline-block; padding: 4px 10px; border-radius: 999px; font-size: 13px; font-weight: 700; border: 1px solid transparent; }
+    .badge.verde { color: var(--green); background: rgba(63,185,80,0.12); border-color: rgba(63,185,80,0.35); }
+    .badge.giallo { color: var(--yellow); background: rgba(210,153,34,0.12); border-color: rgba(210,153,34,0.35); }
+    .badge.rosso { color: var(--red); background: rgba(255,123,114,0.12); border-color: rgba(255,123,114,0.35); }
+    .badge.grande { font-size: 15px; padding: 6px 14px; }
+    .chip { display: inline-block; font-size: 11px; padding: 2px 8px; border-radius: 999px; background: rgba(210,153,34,0.15); color: var(--yellow); font-weight: 700; margin-left: 6px; }
+
+    .filtri { display: flex; flex-direction: column; gap: 8px; }
+    .hero { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+    .stat-box { background-color: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 10px; text-align: center; box-shadow: 0 4px 12px rgba(0,0,0,0.4); display: flex; flex-direction: column; align-items: center; justify-content: flex-start; min-width: 0; }
+    .stat-box.hero-box { padding: 20px 10px; }
+    .stat-label { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; display: flex; align-items: center; justify-content: center; gap: 4px; min-height: 2.6em; line-height: 1.3; text-align: center; }
+    .stat-value { font-size: 20px; font-weight: 700; margin-top: auto; padding-top: 6px; line-height: 1.2; font-variant-numeric: tabular-nums; color: var(--text); }
+    .hero-box .stat-value { font-size: 34px; }
+    .hero-box .stat-label { min-height: 1.3em; }
+    .stat-sub { font-size: 12px; color: var(--muted); margin-top: 4px; min-height: 1.4em; line-height: 1.4; }
+    .stat-value.alert { color: var(--red); }
+    .stat-value.warning { color: var(--yellow); }
+    .stat-value.good { color: var(--green); }
+    .secondari { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .info { position: relative; display: inline-flex; align-items: center; justify-content: center; width: 18px; height: 18px; margin: 0; padding: 0; font-size: 13px; line-height: 1; flex: none; color: var(--blue); cursor: pointer; }
+    .info::after { content: ""; position: absolute; inset: -12px; }
+
+    .pannello { background-color: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px 12px; }
+    .pannello h3 { margin: 0 0 12px 0; font-size: 13px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px; }
+    .trend-riga { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; font-size: 14px; }
+    .trend-nota { font-weight: 700; }
+    .trend-nota.good { color: var(--green); } .trend-nota.alert { color: var(--red); } .trend-nota.neutro { color: var(--muted); }
+
+    .bar-row { display: grid; grid-template-columns: 56px 1fr auto; gap: 8px; align-items: center; font-size: 13px; margin-bottom: 9px; }
+    .bar-row:last-child { margin-bottom: 0; }
+    .bar-row.vuoto { opacity: 0.45; }
+    .bar-label { font-weight: 700; color: var(--text); }
+    .bar-track { background: var(--panel2); border-radius: 6px; height: 10px; overflow: hidden; }
+    .bar-fill { height: 100%; background: var(--blue); border-radius: 6px; }
+    .bar-fill.evid { background: var(--yellow); }
+    .bar-val { color: var(--muted); font-size: 12px; text-align: right; white-space: nowrap; }
+    .vuoto-msg { color: var(--muted); text-align: center; font-size: 14px; padding: 12px 0; }
+
+    .btn-export { background: var(--panel2); color: var(--blue); }
+
+    .skel .stat-value, .skel .stat-sub { color: transparent !important; position: relative; }
+    .skel .stat-value::after, .skel .stat-sub::after {
+      content: ""; position: absolute; left: 20%; right: 20%; top: 10%; bottom: 10%; border-radius: 6px;
+      background: linear-gradient(90deg, #21262d 25%, #30363d 50%, #21262d 75%); background-size: 200% 100%;
+      animation: shimmer 1.2s infinite;
+    }
+    @keyframes shimmer { 0% { background-position: 200% 0; } 100% { background-position: -200% 0; } }
+
+    .storico-filtri { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); }
+    .storico-filtri button { width: auto; padding: 8px 12px; font-size: 13px; background: var(--panel2); color: var(--blue); }
+    .giorno { font-size: 12px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: 0.6px; margin: 6px 2px -4px 2px; }
+    .card { background-color: var(--panel); border: 1px solid var(--border); border-radius: 12px; padding: 14px; display: flex; flex-direction: column; gap: 8px; }
+    .card-header { display: flex; justify-content: space-between; align-items: center; font-weight: 600; color: var(--blue); border-bottom: 1px solid var(--border); padding-bottom: 8px; }
+    .card-row { display: flex; justify-content: space-between; gap: 8px; font-size: 14px; color: var(--muted); }
+    .card-row .valore { color: var(--text); font-weight: 500; text-align: right; }
+    .card-row .valore.soppresso-badge { color: var(--yellow); font-weight: 600; }
+    .card-actions { display: flex; gap: 8px; margin-top: 2px; }
+    .btn-mini { padding: 8px; font-size: 13px; background: transparent; color: var(--blue); min-height: 42px; }
+    .btn-mini.danger { color: var(--red); border-color: rgba(255,123,114,0.5); }
+    #btnAltri { background: var(--panel2); color: var(--blue); }
+
+    .bottom-nav {
+      position: fixed; bottom: 0; left: 0; right: 0; background-color: var(--panel); border-top: 1px solid var(--border);
+      display: flex; justify-content: space-around; padding: 10px 0; padding-bottom: calc(10px + env(safe-area-inset-bottom)); z-index: 1000;
+    }
+    .nav-item { display: flex; flex-direction: column; align-items: center; justify-content: center; color: var(--muted); font-size: 11px; font-weight: 600; text-transform: uppercase; cursor: pointer; width: 33%; gap: 4px; min-height: 44px; }
+    .nav-item.active { color: var(--blue); }
+    .nav-icon { font-size: 20px; }
+
+    #toasts { position: fixed; top: calc(10px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); width: calc(100% - 24px); max-width: 616px; z-index: 3000; display: flex; flex-direction: column; gap: 8px; pointer-events: none; }
+    .toast { padding: 12px 14px; border-radius: 12px; font-size: 14px; font-weight: 600; background: var(--panel2); border: 1px solid var(--border); color: var(--text); box-shadow: 0 8px 24px rgba(0,0,0,0.5); opacity: 0; transform: translateY(-8px); transition: all 0.25s ease; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.ok { border-color: rgba(63,185,80,0.6); color: var(--green); }
+    .toast.err { border-color: rgba(255,123,114,0.6); color: var(--red); }
+    .toast.warn { border-color: rgba(210,153,34,0.6); color: var(--yellow); }
+    .toast.info { border-color: rgba(88,166,255,0.6); color: var(--blue); }
+
+    #modale { position: fixed; inset: 0; background: rgba(1,4,9,0.75); z-index: 2000; display: none; align-items: center; justify-content: center; padding: 16px; }
+    #modale.open { display: flex; }
+    .modale-box { background: var(--panel); border: 1px solid var(--border); border-radius: 16px; padding: 18px; width: 100%; max-width: 420px; display: flex; flex-direction: column; gap: 12px; max-height: 90vh; overflow-y: auto; }
+    .modale-box h2 { margin: 0; font-size: 18px; color: var(--strong); }
+    #modale_corpo { display: flex; flex-direction: column; gap: 8px; font-size: 14px; line-height: 1.45; }
+    #modale_corpo p { margin: 0; }
+    .modale-sub { color: var(--muted); }
+    .modale-nota { color: var(--muted); font-size: 12px; }
+    #modale_errore { color: var(--red); font-size: 13px; font-weight: 600; min-height: 0; }
+    .modale-azioni { display: flex; gap: 10px; }
+    .btn-modale { padding: 12px; }
+    .btn-modale.primary { background: var(--btn-blue); color: #fff; border-color: transparent; }
+    .btn-modale.danger { background: #da3633; color: #fff; border-color: transparent; }
+
+    .due-col { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+    .due-col > div { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+    .avviso { background: rgba(210,153,34,0.12); border: 1px solid rgba(210,153,34,0.45); color: var(--yellow); border-radius: 12px; padding: 10px 12px; font-size: 13px; font-weight: 600; line-height: 1.4; }
+    .avviso-azioni { display: flex; gap: 8px; margin-top: 8px; }
+    .muted { color: var(--muted); font-weight: 400; }
+    .cons-riga { padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; margin-bottom: 8px; cursor: pointer; background: var(--panel2); }
+    .cons-riga:last-child { margin-bottom: 0; }
+    .cons-dati { font-size: 12px; color: var(--muted); margin-top: 3px; }
+    .cons-sub { font-size: 12px; color: var(--muted); margin: -6px 0 10px 0; }
+    #analisi_contenuto.nodati > :not(#analisi_vuoto) { opacity: 0.35; }
+  </style>
+</head>
+<body>
+
+  <div id="toasts" role="status" aria-live="polite"></div>
+
+  <!-- TAB 1: VIAGGIO -->
+  <div id="view-viaggio" class="view-container active">
+    <div class="topbar-mini">
+      <span class="topbar-title">🚉 Monitoraggio Treni</span>
+      <button class="btn-cfg" onclick="apriConfigApi()" title="Configura connessione API">⚙️ API</button>
+    </div>
+
+    <div id="avviso_tz" class="avviso hidden"></div>
+
+    <div id="form_viaggio" style="display: flex; flex-direction: column; gap: 14px;">
+      <button id="btnSmartOrario" class="btn-smart" onclick="selezionaTrenoPerOrario()">⚡ Imposta il treno più vicino all'ora attuale</button>
+
+      <div id="consiglio" class="pannello hidden"></div>
+
+      <div>
+        <label for="treno">Corsa Treno:</label>
+        <select id="treno" onchange="aggiornaPartenze()"></select>
+      </div>
+
+      <div id="selettori_standard" style="display: flex; flex-direction: column; gap: 12px;">
+        <div>
+          <label for="stazione_partenza">Stazione di Partenza:</label>
+          <select id="stazione_partenza" onchange="aggiornaArrivi()"></select>
+        </div>
+        <div>
+          <label for="stazione_arrivo">Stazione di Arrivo:</label>
+          <select id="stazione_arrivo" onchange="aggiornaOpzioniSoppresso(); salvaSelezione();"></select>
+        </div>
+      </div>
+
+      <div id="selettori_manuali" class="hidden" style="display: flex; flex-direction: column; gap: 10px;">
+        <label for="manuale_treno">Nome/Numero Treno:</label><input type="text" id="manuale_treno" oninput="salvaSelezione()">
+        <label for="manuale_partenza">Stazione Partenza:</label><input type="text" id="manuale_partenza" oninput="salvaSelezione()">
+        <label for="manuale_orario_partenza">Orario Partenza Prog.:</label><input type="time" id="manuale_orario_partenza" oninput="salvaSelezione()">
+        <label for="manuale_arrivo">Stazione Arrivo:</label><input type="text" id="manuale_arrivo" oninput="salvaSelezione()">
+        <label for="manuale_orario_arrivo">Orario Arrivo Prog.:</label><input type="time" id="manuale_orario_arrivo" oninput="salvaSelezione()">
+      </div>
+
+      <div class="box-soppresso">
+        <label class="checkbox-row" for="flag_soppresso">
+          <input type="checkbox" id="flag_soppresso" onchange="toggleSoppresso()">
+          <span>In sostituzione di treno soppresso / perso</span>
+        </label>
+        <div id="contenitore_soppresso" class="hidden" style="display: flex; flex-direction: column; gap: 10px;">
+          <label for="treno_originario">Treno Originario Saltato:</label>
+          <select id="treno_originario" onchange="aggiornaOrarioOriginario()"></select>
+          <label for="orario_arrivo_originario">Arrivo Prog. Treno Originario:</label>
+          <input type="time" id="orario_arrivo_originario" oninput="salvaSelezione()">
+        </div>
+      </div>
+    </div>
+
+    <div id="riepilogo_viaggio" class="viaggio-card hidden">
+      <div class="viaggio-titolo" id="viaggio_titolo"></div>
+      <div class="viaggio-percorso" id="viaggio_percorso"></div>
+      <div class="viaggio-timer" id="timer_viaggio">00:00:00</div>
+      <div id="viaggio_stato"></div>
+      <div class="viaggio-dettaglio" id="viaggio_partenza"></div>
+      <div class="viaggio-dettaglio" id="viaggio_arrivo_prog"></div>
+      <div class="viaggio-ripiego" id="viaggio_ripiego"></div>
+      <div id="viaggio_scaduto" class="avviso hidden">
+        <div>⚠ Viaggio in corso da più di 12 ore: te lo sei dimenticato?</div>
+        <div class="avviso-azioni">
+          <button class="btn-mini" onclick="apriArrivoPersonalizzato()">Indica l'arrivo</button>
+          <button class="btn-mini danger" onclick="confermaAnnullaViaggio()">Scarta</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="azioni_secondarie" class="azioni-secondarie hidden">
+      <button class="btn-link" onclick="apriArrivoPersonalizzato()">Ho dimenticato di premere Arrivo</button>
+      <button class="btn-link danger" onclick="confermaAnnullaViaggio()">Annulla viaggio</button>
+    </div>
+
+    <div id="status">Pronto.</div>
+
+    <div class="azione-fissa">
+      <button id="btnPrincipale" class="btn-main partenza" onclick="azionePrincipale()">REGISTRA PARTENZA</button>
+    </div>
+  </div>
+
+  <!-- TAB 2: ANALISI -->
+  <div id="view-analisi" class="view-container">
+    <div class="filtri">
+      <select id="filtro_treno_analisi" onchange="resetStazioneECarica()">
+        <option value="Tutti">Tutti i treni</option>
+      </select>
+      <select id="filtro_stazione_analisi" onchange="caricaDashboard()" class="hidden">
+        <option value="Tutte">Tutte le stazioni (Totale Treno)</option>
+      </select>
+      <select id="filtro_giorni_analisi" onchange="resetStazioneECarica()">
+        <option value="7">Ultimi 7 giorni</option>
+        <option value="30" selected>Ultimi 30 giorni</option>
+        <option value="Tutti">Tutto lo storico</option>
+      </select>
+    </div>
+
+    <div id="analisi_contenuto" class="skel" style="display: flex; flex-direction: column; gap: 14px;">
+      <div id="analisi_vuoto" class="pannello vuoto-msg hidden">Ancora nessun viaggio per questi filtri.</div>
+      <div class="hero">
+        <div class="stat-box hero-box">
+          <div class="stat-label">Puntualità <span class="info" role="button" tabindex="0" onclick="mostraInfo('puntualita')">ⓘ</span></div>
+          <div class="stat-value good" id="stat_puntualita">100%</div>
+          <div class="stat-sub" id="stat_viaggi">&nbsp;</div>
+        </div>
+        <div class="stat-box hero-box">
+          <div class="stat-label">Ritardo medio <span class="info" role="button" tabindex="0" onclick="mostraInfo('medio')">ⓘ</span></div>
+          <div class="stat-value" id="stat_medio_tutti">0 min</div>
+          <div class="stat-sub" id="stat_medio_sub">&nbsp;</div>
+        </div>
+      </div>
+
+      <div class="secondari">
+        <div class="stat-box">
+          <div class="stat-label">Ritardo totale</div>
+          <div class="stat-value alert" id="stat_totale">0h 0m</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Tempo reale perso <span class="info" role="button" tabindex="0" onclick="mostraInfo('reale')">ⓘ</span></div>
+          <div class="stat-value warning" id="stat_totale_reale">0h 0m</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Medio se in ritardo</div>
+          <div class="stat-value" id="stat_medio">0 min</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">P90 <span class="info" role="button" tabindex="0" onclick="mostraInfo('p90')">ⓘ</span></div>
+          <div class="stat-value" id="stat_p90">-</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Delta marcia <span class="info" role="button" tabindex="0" onclick="mostraInfo('delta')">ⓘ</span></div>
+          <div class="stat-value" id="stat_delta">-</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-label">Soppressi / ripieghi</div>
+          <div class="stat-value warning" id="stat_soppressi">0</div>
+        </div>
+      </div>
+
+      <div class="pannello">
+        <h3>Ultimi 7 giorni vs 7 precedenti</h3>
+        <div class="trend-riga" id="trend_riga"><span class="vuoto-msg">—</span></div>
+      </div>
+
+      <div class="pannello">
+        <h3>Ritardo medio giornaliero (min)</h3>
+        <canvas id="ritardiChart" height="200"></canvas>
+        <div id="chart_fallback" class="vuoto-msg hidden">Grafico non disponibile offline.</div>
+      </div>
+
+      <div class="pannello">
+        <h3>Per giorno della settimana</h3>
+        <div id="barre_giorni"></div>
+      </div>
+
+      <div class="pannello">
+        <h3>Confronto fra treni</h3>
+        <div id="barre_treni"></div>
+      </div>
+
+      <button class="btn-export" onclick="esportaCsvUI()">⬇ Scarica CSV (filtri correnti)</button>
+    </div>
+  </div>
+
+  <!-- TAB 3: STORICO -->
+  <div id="view-storico" class="view-container">
+    <div class="storico-filtri">
+      <span id="storico_filtri">Tutti i treni</span>
+      <button onclick="switchTab('analisi')">Cambia filtri</button>
+    </div>
+    <button class="btn-export" onclick="aggiungiViaggioUI()">＋ Aggiungi un viaggio passato</button>
+    <div id="storico_cards" style="display: flex; flex-direction: column; gap: 12px;"></div>
+    <button id="btnAltri" class="hidden" onclick="caricaAltri()">Carica altri</button>
+  </div>
+
+  <!-- NAVIGAZIONE -->
+  <div class="bottom-nav" role="tablist">
+    <div class="nav-item active" data-tab="viaggio" role="tab" tabindex="0" aria-selected="true" onclick="switchTab('viaggio')">
+      <span class="nav-icon">🚉</span><span>Viaggio</span>
+    </div>
+    <div class="nav-item" data-tab="analisi" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('analisi')">
+      <span class="nav-icon">📊</span><span>Analisi</span>
+    </div>
+    <div class="nav-item" data-tab="storico" role="tab" tabindex="0" aria-selected="false" onclick="switchTab('storico')">
+      <span class="nav-icon">🕒</span><span>Storico</span>
+    </div>
+  </div>
+
+  <!-- MODALE -->
+  <div id="modale">
+    <div class="modale-box" role="dialog" aria-modal="true" tabindex="-1">
+      <h2 id="modale_titolo"></h2>
+      <div id="modale_corpo"></div>
+      <div id="modale_errore"></div>
+      <div class="modale-azioni">
+        <button id="modale_annulla" class="btn-modale">Annulla</button>
+        <button id="modale_ok" class="btn-modale primary">Conferma</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    // =====================================================================
+    //  SERVICE WORKER PWA & WRAPPER API REST
+    // =====================================================================
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('sw.js').catch(() => {});
+      });
+    }
+
+    const API_URL_KEY = 'treni_api_url';
+    const API_TOKEN_KEY = 'treni_api_token';
+
+    function getApiConfig() {
+      try {
+        return {
+          url: (localStorage.getItem(API_URL_KEY) || '').trim(),
+          token: (localStorage.getItem(API_TOKEN_KEY) || '').trim()
+        };
+      } catch (e) {
+        return { url: '', token: '' };
+      }
+    }
+
+    async function apiCall(action, payload = {}) {
+      const cfg = getApiConfig();
+      if (!cfg.url || !cfg.token) {
+        throw new Error('Configura URL Web App e Token API dal pulsante ⚙️ API');
+      }
+      const body = Object.assign({}, payload, { action: action, token: cfg.token });
+      const res = await fetch(cfg.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+        body: JSON.stringify(body)
+      });
+      if (!res.ok) throw new Error('Errore HTTP ' + res.status);
+      const json = await res.json();
+      if (!json.success) throw new Error(json.error || 'Errore dal server');
+      return json.data;
+    }
+
+    // Configurazione treni (fallback locale istantaneo, poi aggiornato dal server)
+    let CONFIG = {
+      ordine: ["2712", "26256", "2033", "26224", "2735"],
+      descrizioni: {
+        "2712": "Ivrea / P. Nuova",
+        "26256": "Chivasso / Pinerolo",
+        "2033": "P. Nuova / Milano",
+        "26224": "Pinerolo / Chivasso",
+        "2735": "P. Nuova / Ivrea"
+      },
+      orari: {
+        "2712": { "Chivasso": { Partenza_Programmata: "07:10", Destinazioni: { "Torino Porta Nuova": "07:35", "Torino Porta Susa": "07:25" } } },
+        "26256": { "Chivasso": { Partenza_Programmata: "07:27", Destinazioni: { "Torino Porta Susa": "07:53" } } },
+        "2033": { "Torino Porta Susa": { Partenza_Programmata: "16:05", Destinazioni: { "Chivasso": "16:18" } } },
+        "26224": { "Torino Porta Susa": { Partenza_Programmata: "16:05", Destinazioni: { "Chivasso": "16:33" } } },
+        "2735": {
+          "Torino Porta Nuova": { Partenza_Programmata: "16:20", Destinazioni: { "Chivasso": "16:43" } },
+          "Torino Porta Susa": { Partenza_Programmata: "16:29", Destinazioni: { "Chivasso": "16:43" } }
+        }
+      },
+      tz: { ok: true }
+    };
+
+    const $ = id => document.getElementById(id);
+    const GIORNI_IT = ['Dom', 'Lun', 'Mar', 'Mer', 'Gio', 'Ven', 'Sab'];
+    const PAGINA = 20;
+
+    let timestampPartenza = null;
+    let storicoDati = [];
+    let storicoTotale = 0;
+    let chartInstance = null;
+    let timerInterval = null;
+    let sincronizzazioneInCorso = false;
+    let applicandoSelezione = false;
+    let richiestaDash = 0;
+    let caricandoAltriInCorso = false;
+
+    const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+    const fmt1 = n => Number(n || 0).toLocaleString('it-IT', { maximumFractionDigits: 1 });
+    const fmtOreMin = min => `${Math.floor(min / 60)}h ${min % 60}m`;
+    const minutiDa = str => { const p = String(str).split(':'); return (parseInt(p[0], 10) || 0) * 60 + (parseInt(p[1], 10) || 0); };
+    const normOrario = str => { const p = String(str || '').split(':'); return [p[0] || '0', p[1] || '0', p[2] || '0'].map(x => x.padStart(2, '0')).join(':'); };
+    const dataIso = it => { const p = String(it).split('/'); return p.length === 3 ? `${p[2]}-${p[1].padStart(2, '0')}-${p[0].padStart(2, '0')}` : ''; };
+    const dataIt = iso => { const p = String(iso).split('-'); return p.length === 3 ? `${p[2]}/${p[1]}/${p[0]}` : ''; };
+    const genId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+    const leggiJSON = (k, def) => { try { const v = localStorage.getItem(k); return v ? JSON.parse(v) : def; } catch (e) { return def; } };
+    const classeRitardo = r => (r <= 0 ? 'verde' : (r <= 5 ? 'giallo' : 'rosso'));
+    const testoRitardo = r => (r <= 0 ? 'In orario' : `+${r} min`);
+    const firmaRiga = r => [r[0], r[1], r[5], r[6]].join('|');
+
+    function vibra() {
+      try {
+        if ('vibrate' in navigator && (!navigator.userActivation || navigator.userActivation.hasBeenActive)) navigator.vibrate([30]);
+      } catch (e) {}
+    }
+
+    function toast(msg, tipo = 'ok', ms = 3200) {
+      const el = document.createElement('div');
+      el.className = 'toast ' + tipo;
+      el.textContent = msg;
+      $('toasts').appendChild(el);
+      requestAnimationFrame(() => el.classList.add('show'));
+      setTimeout(() => { el.classList.remove('show'); setTimeout(() => el.remove(), 300); }, ms);
+    }
+
+    // Modale con chiusura sicura su onmousedown (non chiude se selezioni testo trascinando fuori)
+    function modale({ titolo, html = '', ok = 'Conferma', annulla = 'Annulla', danger = false, raccogli = () => true }) {
+      return new Promise(resolve => {
+        const ov = $('modale'), bOk = $('modale_ok'), bNo = $('modale_annulla');
+        const box = ov.querySelector('.modale-box');
+        const precedente = document.activeElement;
+        $('modale_titolo').textContent = titolo;
+        $('modale_corpo').innerHTML = html;
+        $('modale_errore').textContent = '';
+        bOk.textContent = ok;
+        bNo.textContent = annulla;
+        bNo.classList.toggle('hidden', !annulla);
+        bOk.className = 'btn-modale ' + (danger ? 'danger' : 'primary');
+
+        const onKey = e => { if (e.key === 'Escape') chiudi(null); };
+        const chiudi = v => {
+          ov.classList.remove('open');
+          bOk.onclick = bNo.onclick = ov.onmousedown = null;
+          document.removeEventListener('keydown', onKey);
+          if (precedente && precedente.focus) { try { precedente.focus(); } catch (e) {} }
+          resolve(v);
+        };
+        bOk.onclick = () => { const r = raccogli(); if (r === null || r === false) return; chiudi(r); };
+        bNo.onclick = () => chiudi(null);
+        ov.onmousedown = e => { if (e.target === ov) chiudi(null); };
+        document.addEventListener('keydown', onKey);
+        ov.classList.add('open');
+        setTimeout(() => box.focus(), 0);
+      });
+    }
+    const erroreModale = msg => { $('modale_errore').textContent = msg; return false; };
+
+    async function apriConfigApi() {
+      const cfg = getApiConfig();
+      const res = await modale({
+        titolo: '⚙️ Connessione Server API',
+        ok: 'Salva e Connetti',
+        html: `
+          <p class="modale-sub">I dati restano salvati solo nella memoria locale di questo dispositivo.</p>
+          <label for="cfg_url">URL Web App (/exec)</label>
+          <input type="url" id="cfg_url" value="${esc(cfg.url)}" placeholder="https://script.google.com/macros/s/.../exec">
+          <label for="cfg_token">Token Segreto API</label>
+          <input type="password" id="cfg_token" value="${esc(cfg.token)}" placeholder="Token impostato in codice.gs">
+        `,
+        raccogli: () => {
+          const url = $('cfg_url').value.trim();
+          const token = $('cfg_token').value.trim();
+          if (!url || !token) return erroreModale('Inserisci sia URL che Token.');
+          return { url, token };
+        }
+      });
+      if (res) {
+        localStorage.setItem(API_URL_KEY, res.url);
+        localStorage.setItem(API_TOKEN_KEY, res.token);
+        toast('Connessione salvata ✓', 'ok');
+        avviaConnessioneServer();
+      }
+    }
+
+    function switchTab(tabId) {
+      document.querySelectorAll('.view-container').forEach(v => v.classList.remove('active'));
+      $('view-' + tabId).classList.add('active');
+      document.querySelectorAll('.nav-item').forEach(n => {
+        const attivo = n.dataset.tab === tabId;
+        n.classList.toggle('active', attivo);
+        n.setAttribute('aria-selected', attivo ? 'true' : 'false');
+      });
+      window.scrollTo(0, 0);
+      salvaUI();
+    }
+
+    function coloreBarra(inViaggio) {
+      const m = document.querySelector('meta[name="theme-color"]');
+      if (!m) return;
+      const css = getComputedStyle(document.documentElement);
+      m.setAttribute('content', (css.getPropertyValue(inViaggio ? '--hero' : '--bg') || '#0d1117').trim());
+    }
+
+    /* =====================================================================
+       SELEZIONE TRENO / STAZIONI
+       ===================================================================== */
+    function popolaTreni() {
+      const sel = $('treno');
+      sel.innerHTML = '';
+      CONFIG.ordine.forEach(c => sel.appendChild(new Option(`Treno ${c} · ${CONFIG.descrizioni[c]}`, c)));
+      sel.appendChild(new Option('Inserimento Manuale', 'Manuale'));
+
+      const f = $('filtro_treno_analisi');
+      const prevF = f.value;
+      f.innerHTML = '<option value="Tutti">Tutti i treni</option>';
+      CONFIG.ordine.forEach(c => f.appendChild(new Option(`Treno ${c} - ${CONFIG.descrizioni[c]}`, c)));
+      if (prevF) f.value = prevF;
+    }
+
+    function leggiSelezione() {
+      return {
+        treno: $('treno').value,
+        partenza: $('stazione_partenza').value,
+        arrivo: $('stazione_arrivo').value,
+        manuale_treno: $('manuale_treno').value,
+        manuale_partenza: $('manuale_partenza').value,
+        manuale_orario_partenza: $('manuale_orario_partenza').value,
+        manuale_arrivo: $('manuale_arrivo').value,
+        manuale_orario_arrivo: $('manuale_orario_arrivo').value,
+        flag_soppresso: $('flag_soppresso').checked ? '1' : '0',
+        treno_originario: $('treno_originario').value,
+        orario_arrivo_originario: $('orario_arrivo_originario').value
+      };
+    }
+
+    function salvaSelezione() {
+      if (applicandoSelezione) return;
+      const s = leggiSelezione();
+      Object.keys(s).forEach(k => {
+        const map = { treno: 'trenoSalvato', partenza: 'partenzaSalvata', arrivo: 'arrivoSalvato' };
+        localStorage.setItem(map[k] || k, s[k]);
+      });
+    }
+
+    function selezioneDaStorage() {
+      const g = k => localStorage.getItem(k) || '';
+      return {
+        treno: g('trenoSalvato'), partenza: g('partenzaSalvata'), arrivo: g('arrivoSalvata'),
+        manuale_treno: g('manuale_treno'), manuale_partenza: g('manuale_partenza'),
+        manuale_orario_partenza: g('manuale_orario_partenza'), manuale_arrivo: g('manuale_arrivo'),
+        manuale_orario_arrivo: g('manuale_orario_arrivo'), flag_soppresso: g('flag_soppresso'),
+        treno_originario: g('treno_originario'), orario_arrivo_originario: g('orario_arrivo_originario')
+      };
+    }
+
+    function applicaSelezione(s) {
+      applicandoSelezione = true;
+      try {
+        $('manuale_treno').value = s.manuale_treno || '';
+        $('manuale_partenza').value = s.manuale_partenza || '';
+        $('manuale_orario_partenza').value = s.manuale_orario_partenza || '';
+        $('manuale_arrivo').value = s.manuale_arrivo || '';
+        $('manuale_orario_arrivo').value = s.manuale_orario_arrivo || '';
+
+        if (s.treno && (s.treno === 'Manuale' || CONFIG.orari[s.treno])) {
+          $('treno').value = s.treno;
+          aggiornaPartenze();
+          if (s.treno !== 'Manuale') {
+            if (s.partenza && CONFIG.orari[s.treno][s.partenza]) {
+              $('stazione_partenza').value = s.partenza;
+              aggiornaArrivi();
+            }
+            if (s.arrivo) {
+              $('stazione_arrivo').value = s.arrivo;
+              aggiornaOpzioniSoppresso();
+            }
+          }
+        } else {
+          aggiornaPartenze();
+        }
+
+        const sop = s.flag_soppresso === '1';
+        $('flag_soppresso').checked = sop;
+        $('contenitore_soppresso').classList.toggle('hidden', !sop);
+        if (sop) {
+          aggiornaOpzioniSoppresso();
+          if (s.treno_originario) $('treno_originario').value = s.treno_originario;
+          if (s.orario_arrivo_originario) $('orario_arrivo_originario').value = s.orario_arrivo_originario;
+        }
+      } finally {
+        applicandoSelezione = false;
+      }
+      salvaSelezione();
+    }
+
+    function impostaBloccoCampi(bloccato) {
+      ['btnSmartOrario', 'treno', 'stazione_partenza', 'stazione_arrivo', 'manuale_treno', 'manuale_partenza',
+        'manuale_orario_partenza', 'manuale_arrivo', 'manuale_orario_arrivo', 'flag_soppresso', 'treno_originario',
+        'orario_arrivo_originario'].forEach(id => { $(id).disabled = bloccato; });
+    }
+
+    function selezionaTrenoPerOrario(silenzioso) {
+      if (timestampPartenza) return;
+      const now = new Date();
+      const minuti = now.getHours() * 60 + now.getMinutes();
+      let best = null;
+      CONFIG.ordine.forEach(cod => {
+        Object.keys(CONFIG.orari[cod]).forEach(staz => {
+          const diff = Math.abs(minutiDa(CONFIG.orari[cod][staz].Partenza_Programmata) - minuti);
+          if (!best || diff < best.diff) best = { cod, staz, diff };
+        });
+      });
+      if (!best) return;
+      $('treno').value = best.cod;
+      aggiornaPartenze();
+      $('stazione_partenza').value = best.staz;
+      aggiornaArrivi();
+      if (silenzioso) return;
+      const g = now.getDay();
+      if (g === 0 || g === 6) toast(`Weekend: gli orari sono feriali. Scelto comunque il ${best.cod}.`, 'warn', 4000);
+      else toast(`Treno ${best.cod} da ${best.staz} (${CONFIG.orari[best.cod][best.staz].Partenza_Programmata})`, 'info');
+    }
+
+    function toggleSoppresso() {
+      const checked = $('flag_soppresso').checked;
+      $('contenitore_soppresso').classList.toggle('hidden', !checked);
+      if (checked) aggiornaOpzioniSoppresso();
+      salvaSelezione();
+    }
+
+    function aggiornaOpzioniSoppresso() {
+      const trenoAttuale = $('treno').value;
+      const stazPartenza = $('stazione_partenza').value;
+      const stazArrivo = $('stazione_arrivo').value;
+      const selOrig = $('treno_originario');
+      const valorePrecedente = selOrig.value;
+
+      selOrig.innerHTML = '';
+      CONFIG.ordine.forEach(codTreno => {
+        if (codTreno !== trenoAttuale) {
+          let label = `Treno ${codTreno}`;
+          if (CONFIG.orari[codTreno][stazPartenza] && CONFIG.orari[codTreno][stazPartenza].Destinazioni[stazArrivo]) {
+            label += ` (Arr. ${CONFIG.orari[codTreno][stazPartenza].Destinazioni[stazArrivo]})`;
+          }
+          selOrig.appendChild(new Option(label, codTreno));
+        }
+      });
+      selOrig.appendChild(new Option('Altro / Manuale', 'Altro'));
+
+      if (valorePrecedente && Array.from(selOrig.options).some(o => o.value === valorePrecedente)) {
+        selOrig.value = valorePrecedente;
+      }
+      aggiornaOrarioOriginario();
+    }
+
+    function aggiornaOrarioOriginario() {
+      const codOrig = $('treno_originario').value;
+      const stazPartenza = $('stazione_partenza').value;
+      const stazArrivo = $('stazione_arrivo').value;
+      const inputOrario = $('orario_arrivo_originario');
+
+      if (codOrig !== 'Altro' && CONFIG.orari[codOrig]) {
+        if (CONFIG.orari[codOrig][stazPartenza] && CONFIG.orari[codOrig][stazPartenza].Destinazioni[stazArrivo]) {
+          inputOrario.value = CONFIG.orari[codOrig][stazPartenza].Destinazioni[stazArrivo];
+        } else {
+          const primaStaz = Object.keys(CONFIG.orari[codOrig])[0];
+          const primaDest = Object.keys(CONFIG.orari[codOrig][primaStaz].Destinazioni)[0];
+          inputOrario.value = CONFIG.orari[codOrig][primaStaz].Destinazioni[primaDest];
+        }
+      }
+      salvaSelezione();
+    }
+
+    function aggiornaPartenze() {
+      const treno = $('treno').value;
+      const divStandard = $('selettori_standard');
+      const divManuale = $('selettori_manuali');
+      const selPartenza = $('stazione_partenza');
+
+      if (treno === 'Manuale') {
+        divStandard.classList.add('hidden');
+        divManuale.classList.remove('hidden');
+        aggiornaOpzioniSoppresso();
+        salvaSelezione();
+        return;
+      }
+      divStandard.classList.remove('hidden');
+      divManuale.classList.add('hidden');
+      selPartenza.innerHTML = '';
+      Object.keys(CONFIG.orari[treno]).forEach(p => selPartenza.appendChild(new Option(`${p} (${CONFIG.orari[treno][p].Partenza_Programmata})`, p)));
+      aggiornaArrivi();
+    }
+
+    function aggiornaArrivi() {
+      const treno = $('treno').value;
+      if (treno === 'Manuale') return;
+      const selArrivo = $('stazione_arrivo');
+      selArrivo.innerHTML = '';
+      const destinazioni = CONFIG.orari[treno][$('stazione_partenza').value].Destinazioni;
+      Object.keys(destinazioni).forEach(a => selArrivo.appendChild(new Option(`${a} (${destinazioni[a]})`, a)));
+      aggiornaOpzioniSoppresso();
+      salvaSelezione();
+    }
+
+    /* =====================================================================
+       VIAGGIO IN CORSO (CALCOLO RITARDO LIVE SENZA ARROTONDAMENTI)
+       ===================================================================== */
+    function orariViaggio() {
+      const modalita = $('treno').value;
+      if (modalita === 'Manuale') {
+        return {
+          treno: $('manuale_treno').value || 'Manuale',
+          da: $('manuale_partenza').value || '-',
+          a: $('manuale_arrivo').value || '-',
+          partProg: $('manuale_orario_partenza').value || '00:00',
+          arrProg: $('manuale_orario_arrivo').value || '00:00',
+          descr: ''
+        };
+      }
+      const partenza = $('stazione_partenza').value;
+      const arrivo = $('stazione_arrivo').value;
+      const f = (CONFIG.orari[modalita] || {})[partenza];
+      return {
+        treno: modalita, da: partenza, a: arrivo,
+        partProg: f ? f.Partenza_Programmata : '00:00',
+        arrProg: f && f.Destinazioni[arrivo] ? f.Destinazioni[arrivo] : '00:00',
+        descr: CONFIG.descrizioni[modalita] || ''
+      };
+    }
+
+    function deltaMinuti(orarioProgStr, riferimento) {
+      if (!orarioProgStr || !orarioProgStr.includes(':')) return 0;
+      const split = orarioProgStr.split(':');
+      const prog = new Date(riferimento.getFullYear(), riferimento.getMonth(), riferimento.getDate(), parseInt(split[0], 10), parseInt(split[1], 10), 0);
+      return Math.trunc((riferimento.getTime() - prog.getTime()) / 60000);
+    }
+
+    function avviaCronometro() {
+      if (!timestampPartenza) return;
+      const start = new Date(timestampPartenza).getTime();
+      const v = orariViaggio();
+
+      $('viaggio_titolo').textContent = `🚆 Treno ${v.treno}${v.descr ? ' · ' + v.descr : ''}`;
+      $('viaggio_percorso').textContent = `${v.da} → ${v.a}`;
+      const dPart = deltaMinuti(v.partProg, new Date(timestampPartenza));
+      $('viaggio_partenza').textContent = `Partito alle ${new Date(timestampPartenza).toLocaleTimeString('it-IT')} (prog. ${v.partProg}${dPart > 0 ? ', +' + dPart + ' min' : ''})`;
+      $('viaggio_arrivo_prog').textContent = `Arrivo programmato: ${v.arrProg}`;
+
+      if (timerInterval) clearInterval(timerInterval);
+
+      const tick = () => {
+        const now = new Date();
+        const diff = Math.max(0, Math.floor((now.getTime() - start) / 1000));
+        const h = String(Math.floor(diff / 3600)).padStart(2, '0');
+        const m = String(Math.floor((diff % 3600) / 60)).padStart(2, '0');
+        const s = String(diff % 60).padStart(2, '0');
+        $('timer_viaggio').textContent = `${h}:${m}:${s}`;
+
+        const vecchio = diff > 12 * 3600;
+        $('viaggio_scaduto').classList.toggle('hidden', !vecchio);
+        const delta = deltaMinuti(v.arrProg, now);
+        if (vecchio) {
+          $('viaggio_stato').innerHTML = '';
+        } else if (delta > 0) {
+          $('viaggio_stato').innerHTML = `<span class="badge grande ${classeRitardo(delta)}">Ritardo attuale +${delta} min</span>`;
+        } else {
+          $('viaggio_stato').innerHTML = `<span class="badge grande verde">${delta === 0 ? 'Arrivo previsto ora' : 'Mancano ' + Math.abs(delta) + ' min all\'arrivo prog.'}</span>`;
+        }
+
+        if ($('flag_soppresso').checked) {
+          const arrOrig = $('orario_arrivo_originario').value;
+          if (arrOrig) {
+            const dOrig = deltaMinuti(arrOrig, now);
+            $('viaggio_ripiego').textContent = `🔁 In sostituzione del ${$('treno_originario').value} (arr. ${arrOrig}) · persi finora +${dOrig > 0 ? dOrig : 0} min`;
+          } else {
+            $('viaggio_ripiego').textContent = '';
+          }
+        } else {
+          $('viaggio_ripiego').textContent = '';
+        }
+      };
+      tick();
+      timerInterval = setInterval(tick, 1000);
+    }
+
+    function fermaCronometro() {
+      if (timerInterval) clearInterval(timerInterval);
+      timerInterval = null;
+      $('timer_viaggio').textContent = '00:00:00';
+      $('viaggio_stato').innerHTML = '';
+      $('viaggio_scaduto').classList.add('hidden');
+    }
+
+    function impostaStatoInViaggio() {
+      const b = $('btnPrincipale');
+      b.className = 'btn-main arrivo';
+      b.textContent = 'REGISTRA ARRIVO';
+      b.disabled = false;
+      $('form_viaggio').classList.add('hidden');
+      $('riepilogo_viaggio').classList.remove('hidden');
+      $('azioni_secondarie').classList.remove('hidden');
+      impostaBloccoCampi(true);
+      $('status').textContent = 'In viaggio.';
+      coloreBarra(true);
+      avviaCronometro();
+    }
+
+    function resetViaggioLocale(messaggio = 'Pronto.') {
+      localStorage.removeItem('timestampPartenza');
+      localStorage.removeItem('viaggioSync');
+      timestampPartenza = null;
+      const b = $('btnPrincipale');
+      b.className = 'btn-main partenza';
+      b.textContent = 'REGISTRA PARTENZA';
+      b.disabled = false;
+      $('form_viaggio').classList.remove('hidden');
+      $('riepilogo_viaggio').classList.add('hidden');
+      $('azioni_secondarie').classList.add('hidden');
+      impostaBloccoCampi(false);
+      $('status').textContent = messaggio;
+      coloreBarra(false);
+      fermaCronometro();
+    }
+
+    function chiudiViaggio(messaggio) {
+      resetViaggioLocale(messaggio);
+      cancellaViaggioServer();
+      caricaConsiglio();
+    }
+
+    function azionePrincipale() {
+      if (timestampPartenza) registraArrivo();
+      else registraPartenza();
+    }
+
+    function registraPartenza() {
+      if ($('treno').value === 'Manuale') {
+        if (!$('manuale_treno').value.trim() || !$('manuale_partenza').value.trim() || !$('manuale_arrivo').value.trim()) {
+          toast('Inserimento manuale: compila treno e stazioni.', 'warn');
+          return;
+        }
+      }
+      vibra();
+      timestampPartenza = new Date().toISOString();
+      localStorage.setItem('timestampPartenza', timestampPartenza);
+      localStorage.setItem('viaggioSync', '0');
+      salvaSelezione();
+      impostaStatoInViaggio();
+      inviaViaggioServer();
+    }
+
+    async function confermaAnnullaViaggio() {
+      const ok = await modale({ titolo: 'Annullare il viaggio?', html: '<p>Il viaggio in corso non verrà salvato nello storico.</p>', ok: 'Sì, annulla', annulla: 'Continua il viaggio', danger: true });
+      if (ok) {
+        chiudiViaggio('Viaggio annullato.');
+        toast('Viaggio annullato.', 'info');
+      }
+    }
+
+    function costruisciPayload(arrivoISO) {
+      const v = orariViaggio();
+      const payload = {
+        Id: genId(),
+        Partenza_Effettiva: timestampPartenza,
+        Arrivo_Effettivo: arrivoISO,
+        Treno: v.treno,
+        Stazione_Partenza: v.da,
+        Stazione_Arrivo: v.a,
+        Partenza_Programmata: v.partProg,
+        Arrivo_Programmato: v.arrProg
+      };
+      if ($('flag_soppresso').checked) {
+        payload.Treno_Originario = $('treno_originario').value;
+        payload.Arrivo_Programmato_Originario = $('orario_arrivo_originario').value || payload.Arrivo_Programmato;
+      }
+      return payload;
+    }
+
+    function registraArrivo() {
+      completaViaggio(new Date().toISOString());
+    }
+
+    async function completaViaggio(arrivoISO) {
+      if (!timestampPartenza || isNaN(new Date(timestampPartenza).getTime())) {
+        chiudiViaggio('Pronto.');
+        toast('Orario di partenza non trovato: viaggio non salvato.', 'err', 4500);
+        return;
+      }
+      vibra();
+      $('btnPrincipale').disabled = true;
+      $('status').textContent = 'Salvataggio...';
+
+      const payload = costruisciPayload(arrivoISO);
+      const resetFlag = () => {
+        $('flag_soppresso').checked = false;
+        $('contenitore_soppresso').classList.add('hidden');
+        salvaSelezione();
+      };
+
+      try {
+        await apiCall('scriviStorico', { payload: payload });
+        resetFlag();
+        chiudiViaggio('Viaggio salvato!');
+        toast('Viaggio salvato ✓', 'ok');
+        caricaDashboard();
+      } catch (e) {
+        const coda = leggiJSON('codaOffline', []);
+        coda.push(payload);
+        localStorage.setItem('codaOffline', JSON.stringify(coda));
+        resetFlag();
+        chiudiViaggio('Rete assente. Salvato in coda offline.');
+        toast('Rete assente: viaggio in coda offline.', 'warn', 4000);
+      }
+    }
+
+    async function apriArrivoPersonalizzato() {
+      if (!timestampPartenza) return;
+      const aLocale = d => new Date(d.getTime() - d.getTimezoneOffset() * 60000).toISOString().slice(0, 16);
+      const ora = new Date();
+      const minVal = aLocale(new Date(timestampPartenza));
+      const res = await modale({
+        titolo: 'Arrivo dimenticato',
+        ok: 'Salva viaggio',
+        html: `<p class="modale-sub">Indica quando sei realmente arrivato.</p>
+               <label for="arr_pers">Data e ora di arrivo</label>
+               <input type="datetime-local" id="arr_pers" value="${aLocale(ora)}" min="${minVal}" max="${aLocale(ora)}">`,
+        raccogli: () => {
+          const v = $('arr_pers').value;
+          const d = new Date(v);
+          if (!v || isNaN(d.getTime())) return erroreModale('Inserisci data e ora valide.');
+          if (d.getTime() < new Date(timestampPartenza).getTime()) return erroreModale("L'arrivo non può precedere la partenza.");
+          if (d.getTime() > Date.now() + 60000) return erroreModale("L'arrivo non può essere nel futuro.");
+          return d.toISOString();
+        }
+      });
+      if (res) completaViaggio(res);
+    }
+
+    async function inviaViaggioServer() {
+      try {
+        await apiCall('salvaViaggio', { viaggio: { timestampPartenza: timestampPartenza, selezione: leggiSelezione() } });
+        localStorage.setItem('viaggioSync', '1');
+      } catch (e) {}
+    }
+
+    async function cancellaViaggioServer() {
+      localStorage.setItem('cancellaPendente', '1');
+      try {
+        await apiCall('cancellaViaggio');
+        localStorage.removeItem('cancellaPendente');
+      } catch (e) {}
+    }
+
+    async function sincronizzaViaggio() {
+      try {
+        const srv = await apiCall('leggiViaggio');
+        const locale = localStorage.getItem('timestampPartenza');
+
+        if (localStorage.getItem('cancellaPendente') === '1') {
+          cancellaViaggioServer();
+          return;
+        }
+        if (locale && localStorage.getItem('viaggioSync') !== '1') {
+          inviaViaggioServer();
+          return;
+        }
+        if (srv && srv.timestampPartenza) {
+          if (srv.timestampPartenza !== locale) {
+            if (locale) resetViaggioLocale('Pronto.');
+            applicaSelezione(srv.selezione || {});
+            timestampPartenza = srv.timestampPartenza;
+            localStorage.setItem('timestampPartenza', timestampPartenza);
+            localStorage.setItem('viaggioSync', '1');
+            impostaStatoInViaggio();
+            toast('Viaggio in corso ripreso da un altro dispositivo.', 'info', 4000);
+          } else {
+            localStorage.setItem('viaggioSync', '1');
+          }
+        } else if (locale) {
+          resetViaggioLocale('Pronto.');
+          toast('Il viaggio risulta concluso su un altro dispositivo.', 'warn', 4000);
+        }
+      } catch (e) {}
+    }
+
+    async function controllaCodaOffline() {
+      if (sincronizzazioneInCorso) return;
+      const coda = leggiJSON('codaOffline', []);
+      if (coda.length === 0) return;
+      sincronizzazioneInCorso = true;
+      $('status').textContent = `Sincronizzo ${coda.length} viaggi in sospeso...`;
+      try {
+        await apiCall('scriviStorico', { payload: coda });
+        const rimanenti = leggiJSON('codaOffline', []).slice(coda.length);
+        if (rimanenti.length) localStorage.setItem('codaOffline', JSON.stringify(rimanenti));
+        else localStorage.removeItem('codaOffline');
+        $('status').textContent = timestampPartenza ? 'In viaggio.' : 'Pronto.';
+        toast(`${coda.length} viaggi sincronizzati ✓`, 'ok');
+        caricaDashboard();
+      } catch (e) {
+        $('status').textContent = timestampPartenza ? 'In viaggio (coda in attesa).' : `Rete assente (${coda.length} in coda).`;
+      } finally {
+        sincronizzazioneInCorso = false;
+      }
+    }
+
+    /* =====================================================================
+       ANALISI
+       ===================================================================== */
+    const INFO = {
+      puntualita: ['Puntualità', 'Percentuale di viaggi arrivati all\'orario programmato o prima. Nessuna tolleranza: anche 1 minuto di ritardo conta come ritardo.'],
+      medio: ['Ritardo medio', 'Media del ritardo all\'arrivo su tutti i viaggi (i viaggi puntuali contano zero). Sotto, il ritardo medio calcolato solo sui viaggi in cui il treno è arrivato in ritardo.'],
+      reale: ['Tempo reale perso', 'Tempo realmente perso rispetto al treno originario in caso di soppressione/ripiego; altrimenti coincide col ritardo totale.'],
+      p90: ['P90 (90° percentile)', 'Nel 90% dei viaggi in ritardo il ritardo è stato pari o inferiore a questo valore.'],
+      delta: ['Delta marcia', 'Differenza media fra ritardo all\'arrivo e ritardo alla partenza. Positivo: accumula ritardo. Negativo: recupera.']
+    };
+    function mostraInfo(chiave) {
+      const [t, d] = INFO[chiave];
+      modale({ titolo: t, html: `<p>${esc(d)}</p>`, ok: 'Chiudi', annulla: '' });
+    }
+
+    function filtriCorrenti() {
+      return {
+        treno: $('filtro_treno_analisi').value || 'Tutti',
+        stazione: $('filtro_stazione_analisi').value || 'Tutte',
+        giorni: $('filtro_giorni_analisi').value || '30'
+      };
+    }
+
+    function resetStazioneECarica() {
+      $('filtro_stazione_analisi').value = 'Tutte';
+      caricaDashboard();
+    }
+
+    function descrizioneFiltri() {
+      const t = $('filtro_treno_analisi'), g = $('filtro_giorni_analisi'), s = $('filtro_stazione_analisi');
+      let txt = t.options[t.selectedIndex].text;
+      if (!s.classList.contains('hidden') && s.value !== 'Tutte') txt += ` · arrivi a ${s.value}`;
+      return `${txt} · ${g.options[g.selectedIndex].text}`;
+    }
+
+    function renderBarre(id, voci) {
+      const max = Math.max(0.1, ...voci.map(v => v.valore));
+      $(id).innerHTML = voci.map(v => `
+        <div class="bar-row ${v.vuoto ? 'vuoto' : ''}" ${v.titolo ? `title="${esc(v.titolo)}"` : ''}>
+          <span class="bar-label">${esc(v.label)}</span>
+          <div class="bar-track"><div class="bar-fill ${v.evidenzia ? 'evid' : ''}" style="width:${v.vuoto ? 0 : Math.max(2, v.valore / max * 100)}%"></div></div>
+          <span class="bar-val">${esc(v.testo)}</span>
+        </div>`).join('') || '<div class="vuoto-msg">Nessun dato</div>';
+    }
+
+    function renderTrend(t) {
+      const el = $('trend_riga');
+      if (!t || t.ultimi7.n === 0 || t.precedenti7.n === 0) {
+        el.innerHTML = '<span class="vuoto-msg" style="padding:0">Dati insufficienti per il confronto.</span>';
+        return;
+      }
+      const diff = Math.round((t.ultimi7.medio - t.precedenti7.medio) * 10) / 10;
+      let nota, cls;
+      if (diff < 0) { nota = `▼ migliora di ${fmt1(Math.abs(diff))} min`; cls = 'good'; }
+      else if (diff > 0) { nota = `▲ peggiora di ${fmt1(diff)} min`; cls = 'alert'; }
+      else { nota = '= invariato'; cls = 'neutro'; }
+      el.innerHTML = `<span><b>${fmt1(t.ultimi7.medio)} min</b> <span style="color:var(--muted)">(${t.ultimi7.n} viaggi)</span> vs <b>${fmt1(t.precedenti7.medio)} min</b> <span style="color:var(--muted)">(${t.precedenti7.n})</span></span><span class="trend-nota ${cls}">${nota}</span>`;
+    }
+
+    function applicaDatiDashboard(dati, filtroTreno, selStazione) {
+      storicoDati = dati.storico || [];
+      storicoTotale = dati.storicoTotale || storicoDati.length;
+
+      if (filtroTreno === 'Tutti') {
+        selStazione.classList.add('hidden');
+      } else {
+        selStazione.classList.remove('hidden');
+        const stazioneAttuale = selStazione.value;
+        selStazione.innerHTML = '<option value="Tutte">Tutte le stazioni (Totale Treno)</option>';
+        (dati.stazioniDisponibili || []).forEach(staz => {
+          const opt = document.createElement('option');
+          opt.value = staz;
+          opt.textContent = `Solo arrivi a ${staz}`;
+          selStazione.appendChild(opt);
+        });
+        if ((dati.stazioniDisponibili || []).includes(stazioneAttuale)) selStazione.value = stazioneAttuale;
+      }
+
+      const st = dati.stats;
+      const nodati = !st.viaggi;
+      $('analisi_vuoto').classList.toggle('hidden', !nodati);
+      $('analisi_contenuto').classList.toggle('nodati', nodati);
+      const pEl = $('stat_puntualita');
+      pEl.textContent = `${st.puntualita}%`;
+      pEl.className = 'stat-value ' + (st.puntualita >= 80 ? 'good' : (st.puntualita >= 50 ? 'warning' : 'alert'));
+      $('stat_viaggi').textContent = `su ${st.viaggi || 0} viaggi`;
+      $('stat_medio_tutti').textContent = `${fmt1(st.medioTutti)} min`;
+      $('stat_medio_sub').textContent = `${st.medio} min se in ritardo`;
+
+      $('stat_totale').textContent = fmtOreMin(st.totale);
+      const totReale = st.totaleReale !== undefined ? st.totaleReale : st.totale;
+      $('stat_totale_reale').textContent = fmtOreMin(totReale);
+      $('stat_soppressi').textContent = st.soppressi || 0;
+      $('stat_medio').textContent = `${st.medio} min`;
+      $('stat_p90').textContent = `≤ ${st.p90} min`;
+      const dm = st.deltaMarcia;
+      $('stat_delta').innerHTML = `<span style="color:${dm <= 0 ? 'var(--green)' : 'var(--red)'}">${dm > 0 ? '+' : ''}${dm} min</span>`;
+
+      renderTrend(dati.trend);
+
+      renderBarre('barre_giorni', (dati.perGiorno || []).map(g => ({
+        label: g.giorno, valore: g.medio, vuoto: g.n === 0,
+        testo: g.n === 0 ? '—' : `${fmt1(g.medio)} min · ${g.n}`
+      })));
+
+      renderBarre('barre_treni', (dati.perTreno || []).map(t => ({
+        label: t.treno, titolo: t.descrizione, valore: t.medio, evidenzia: t.treno === filtroTreno,
+        testo: `${fmt1(t.medio)} min · ${t.puntualita}% pt · ${t.n}`
+      })));
+
+      disegnaGrafico(dati.chartDati || []);
+      renderStorico();
+      $('analisi_contenuto').classList.remove('skel');
+    }
+
+    async function caricaDashboard() {
+      salvaUI();
+      const f = filtriCorrenti();
+      const selStazione = $('filtro_stazione_analisi');
+      const chiaveCache = 'cacheDash_' + [f.treno, f.stazione, f.giorni].join('|');
+      const cache = leggiJSON(chiaveCache, null);
+      const id = ++richiestaDash;
+
+      if (cache) applicaDatiDashboard(cache, f.treno, selStazione);
+      else $('analisi_contenuto').classList.add('skel');
+
+      try {
+        const dati = await apiCall('dashboard', { treno: f.treno, stazione: f.stazione, giorni: f.giorni });
+        if (id !== richiestaDash) return;
+        try { localStorage.setItem(chiaveCache, JSON.stringify(dati)); } catch (e) {}
+        applicaDatiDashboard(dati, f.treno, selStazione);
+      } catch (e) {
+        if (id !== richiestaDash) return;
+        if (!cache) {
+          $('analisi_contenuto').classList.remove('skel');
+          toast(e.message || 'Dati non disponibili.', 'err');
+        }
+      }
+    }
+
+    function disegnaGrafico(datiArray) {
+      if (typeof Chart === 'undefined') { $('chart_fallback').classList.remove('hidden'); return; }
+      $('chart_fallback').classList.add('hidden');
+      if (chartInstance) chartInstance.destroy();
+      const ctx = $('ritardiChart').getContext('2d');
+      const css = getComputedStyle(document.documentElement);
+      const cMuted = css.getPropertyValue('--muted').trim() || '#8b949e';
+      const cGrid = css.getPropertyValue('--border').trim() || '#30363d';
+
+      chartInstance = new Chart(ctx, {
+        data: {
+          labels: datiArray.map(d => d.data.substring(0, 5)),
+          datasets: [
+            {
+              type: 'bar', label: 'Ritardo treno', data: datiArray.map(d => d.ritardo),
+              backgroundColor: 'rgba(255, 123, 114, 0.55)', borderColor: '#ff7b72', borderWidth: 1, borderRadius: 4
+            },
+            {
+              type: 'line', label: 'Ritardo reale utente', data: datiArray.map(d => d.ritardoReale !== undefined ? d.ritardoReale : d.ritardo),
+              borderColor: '#d29922', backgroundColor: 'transparent', borderDash: [4, 4], borderWidth: 2, pointRadius: 3, tension: 0.3
+            }
+          ]
+        },
+        options: {
+          responsive: true,
+          plugins: { legend: { display: true, labels: { color: cMuted, boxWidth: 12 } } },
+          scales: {
+            x: { ticks: { color: cMuted }, grid: { display: false } },
+            y: { ticks: { color: cMuted }, grid: { color: cGrid }, min: 0, title: { display: true, text: 'minuti', color: cMuted } }
+          }
+        }
+      });
+    }
+
+    async function esportaCsvUI() {
+      const f = filtriCorrenti();
+      toast('Preparo il CSV...', 'info', 1800);
+      try {
+        const csv = await apiCall('esportaCsv', { treno: f.treno, stazione: f.stazione, giorni: f.giorni });
+        const nome = `storico_treni_${new Date().toISOString().slice(0, 10)}.csv`;
+        await scaricaFile(nome, csv, 'text/csv;charset=utf-8');
+      } catch (e) {
+        toast('Esportazione non riuscita.', 'err');
+      }
+    }
+
+    async function scaricaFile(nome, contenuto, mime) {
+      const blob = new Blob([contenuto], { type: mime });
+      try {
+        const file = new File([blob], nome, { type: mime });
+        if (navigator.canShare && navigator.canShare({ files: [file] })) {
+          await navigator.share({ files: [file], title: nome });
+          return;
+        }
+      } catch (e) {
+        if (e && e.name === 'AbortError') return;
+      }
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = nome;
+      document.body.appendChild(a); a.click(); a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 5000);
+    }
+
+    /* =====================================================================
+       STORICO & MODIFICA VIAGGIO
+       ===================================================================== */
+    function etichettaGiorno(dataStr) {
+      const p = String(dataStr).split('/');
+      if (p.length !== 3) return dataStr;
+      const d = new Date(parseInt(p[2], 10), parseInt(p[1], 10) - 1, parseInt(p[0], 10));
+      return `${GIORNI_IT[d.getDay()]} ${dataStr}`;
+    }
+
+    function cardHtml(it, i) {
+      const riga = it.r;
+      const ritardo = parseInt(riga[8], 10) || 0;
+      const trenoOrig = riga[10] ? riga[10].toString().trim() : '';
+      const ritardoReale = (riga[11] !== undefined && riga[11] !== '') ? (parseInt(riga[11], 10) || 0) : ritardo;
+
+      const rigaSoppresso = trenoOrig !== ''
+        ? `<div class="card-row"><span>Sost. treno ${esc(trenoOrig)}:</span><span class="valore soppresso-badge">Persi ${ritardoReale} min reali</span></div>` : '';
+
+      return `
+        <div class="card">
+          <div class="card-header">
+            <span>Treno ${esc(riga[1])}${trenoOrig !== '' ? '<span class="chip">🔁 ripiego</span>' : ''}</span>
+            <span class="badge ${classeRitardo(ritardo)}">${testoRitardo(ritardo)}</span>
+          </div>
+          <div class="card-row"><span>Da ${esc(riga[9] || '-')}</span><span class="valore">${esc(riga[5])} (prog. ${esc(riga[3])})</span></div>
+          <div class="card-row"><span>A ${esc(riga[2])}</span><span class="valore">${esc(riga[6])} (prog. ${esc(riga[4])})</span></div>
+          ${rigaSoppresso}
+          <div class="card-actions">
+            <button class="btn-mini" onclick="modificaViaggioUI(${i})">Modifica</button>
+            <button class="btn-mini danger" onclick="eliminaViaggioUI(${i})">Elimina</button>
+          </div>
+        </div>`;
+    }
+
+    function renderStorico() {
+      let html = '';
+      let ultimaData = null;
+      storicoDati.forEach((it, i) => {
+        if (it.r[0] !== ultimaData) {
+          ultimaData = it.r[0];
+          html += `<div class="giorno">${esc(etichettaGiorno(ultimaData))}</div>`;
+        }
+        html += cardHtml(it, i);
+      });
+      $('storico_cards').innerHTML = html || '<div class="vuoto-msg">Nessun viaggio per i filtri selezionati.</div>';
+      const restanti = storicoTotale - storicoDati.length;
+      $('btnAltri').classList.toggle('hidden', restanti <= 0);
+      $('btnAltri').textContent = `Carica altri (${restanti})`;
+      $('storico_filtri').textContent = descrizioneFiltri();
+    }
+
+    async function caricaAltri() {
+      if (caricandoAltriInCorso) return;
+      caricandoAltriInCorso = true;
+      const f = filtriCorrenti();
+      $('btnAltri').disabled = true;
+      try {
+        const res = await apiCall('storico', { treno: f.treno, stazione: f.stazione, giorni: f.giorni, offset: storicoDati.length, limite: PAGINA });
+        storicoDati = storicoDati.concat(res.righe || []);
+        storicoTotale = res.totale;
+        renderStorico();
+      } catch (e) {
+        toast('Impossibile caricare altri viaggi.', 'err');
+      } finally {
+        caricandoAltriInCorso = false;
+        $('btnAltri').disabled = false;
+      }
+    }
+
+    const FV = id => $('fv_' + id);
+    const oggiIsoLocale = () => { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; };
+
+    function htmlFormViaggio() {
+      return `
+        <label for="fv_data">Data</label>
+        <input type="date" id="fv_data" max="${oggiIsoLocale()}">
+        <label for="fv_treno">Treno</label>
+        <select id="fv_treno"></select>
+        <div id="fv_std" style="display:flex; flex-direction:column; gap:8px;">
+          <label for="fv_da">Stazione di partenza</label><select id="fv_da"></select>
+          <label for="fv_a">Stazione di arrivo</label><select id="fv_a"></select>
+        </div>
+        <div id="fv_man" class="hidden" style="display:flex; flex-direction:column; gap:8px;">
+          <label for="fv_man_treno">Nome/numero treno</label><input type="text" id="fv_man_treno">
+          <label for="fv_man_da">Stazione di partenza</label><input type="text" id="fv_man_da">
+          <label for="fv_man_a">Stazione di arrivo</label><input type="text" id="fv_man_a">
+        </div>
+        <div class="due-col">
+          <div><label for="fv_pp">Partenza prog.</label><input type="time" id="fv_pp"></div>
+          <div><label for="fv_ap">Arrivo prog.</label><input type="time" id="fv_ap"></div>
+        </div>
+        <div class="due-col">
+          <div><label for="fv_pe">Partenza effettiva</label><input type="time" step="1" id="fv_pe"></div>
+          <div><label for="fv_ae">Arrivo effettivo</label><input type="time" step="1" id="fv_ae"></div>
+        </div>
+        <label class="checkbox-row" for="fv_sopp"><input type="checkbox" id="fv_sopp"><span>Ripiego per treno soppresso / perso</span></label>
+        <div id="fv_sopp_box" class="hidden" style="display:flex; flex-direction:column; gap:8px;">
+          <label for="fv_orig">Treno originario saltato</label><select id="fv_orig"></select>
+          <label for="fv_orig_arr">Arrivo prog. treno originario</label><input type="time" id="fv_orig_arr">
+        </div>
+        <div class="modale-nota">I ritardi vengono ricalcolati senza arrotondamento per eccesso.</div>`;
+    }
+
+    function fvPopolaPartenze() {
+      const t = FV('treno').value;
+      const std = t !== 'Manuale' && CONFIG.orari[t];
+      FV('std').classList.toggle('hidden', !std);
+      FV('man').classList.toggle('hidden', !!std);
+      if (!std) return;
+      const selDa = FV('da');
+      selDa.innerHTML = '';
+      Object.keys(CONFIG.orari[t]).forEach(p => selDa.appendChild(new Option(`${p} (${CONFIG.orari[t][p].Partenza_Programmata})`, p)));
+      fvPopolaArrivi();
+    }
+
+    function fvPopolaArrivi() {
+      const t = FV('treno').value;
+      if (!CONFIG.orari[t] || !CONFIG.orari[t][FV('da').value]) return;
+      const dest = CONFIG.orari[t][FV('da').value].Destinazioni;
+      const selA = FV('a');
+      selA.innerHTML = '';
+      Object.keys(dest).forEach(a => selA.appendChild(new Option(`${a} (${dest[a]})`, a)));
+      fvAutoOrari();
+    }
+
+    function fvAutoOrari() {
+      const t = FV('treno').value;
+      if (!CONFIG.orari[t]) return;
+      const f = CONFIG.orari[t][FV('da').value];
+      if (!f) return;
+      FV('pp').value = f.Partenza_Programmata;
+      FV('ap').value = f.Destinazioni[FV('a').value] || '';
+      fvAutoOrig();
+    }
+
+    function fvPopolaOrig() {
+      const sel = FV('orig');
+      const prec = sel.value;
+      const t = FV('treno').value;
+      sel.innerHTML = '';
+      CONFIG.ordine.forEach(c => { if (c !== t) sel.appendChild(new Option(`Treno ${c}`, c)); });
+      sel.appendChild(new Option('Altro / Manuale', 'Altro'));
+      if (prec && Array.from(sel.options).some(o => o.value === prec)) sel.value = prec;
+    }
+
+    function fvAutoOrig() {
+      if (!FV('sopp').checked) return;
+      const o = FV('orig').value;
+      if (o === 'Altro' || !CONFIG.orari[o]) return;
+      const da = FV('da').value, a = FV('a').value;
+      if (CONFIG.orari[o][da] && CONFIG.orari[o][da].Destinazioni[a]) {
+        FV('orig_arr').value = CONFIG.orari[o][da].Destinazioni[a];
+      } else {
+        const ps = Object.keys(CONFIG.orari[o])[0];
+        const pd = Object.keys(CONFIG.orari[o][ps].Destinazioni)[0];
+        FV('orig_arr').value = CONFIG.orari[o][ps].Destinazioni[pd];
+      }
+    }
+
+    function fvInizializza(ini) {
+      const selT = FV('treno');
+      CONFIG.ordine.forEach(c => selT.appendChild(new Option(`Treno ${c} · ${CONFIG.descrizioni[c]}`, c)));
+      selT.appendChild(new Option('Altro / Manuale', 'Manuale'));
+      selT.onchange = () => { fvPopolaPartenze(); fvPopolaOrig(); fvAutoOrig(); };
+      FV('da').onchange = fvPopolaArrivi;
+      FV('a').onchange = fvAutoOrari;
+      FV('orig').onchange = fvAutoOrig;
+      FV('sopp').onchange = () => { FV('sopp_box').classList.toggle('hidden', !FV('sopp').checked); fvPopolaOrig(); fvAutoOrig(); };
+
+      FV('data').value = ini.data;
+      const std = ini.treno && CONFIG.orari[ini.treno] && CONFIG.orari[ini.treno][ini.da] && CONFIG.orari[ini.treno][ini.da].Destinazioni[ini.a];
+      if (std) {
+        selT.value = ini.treno;
+        fvPopolaPartenze();
+        FV('da').value = ini.da;
+        fvPopolaArrivi();
+        FV('a').value = ini.a;
+      } else if (ini.treno) {
+        selT.value = 'Manuale';
+        fvPopolaPartenze();
+        FV('man_treno').value = ini.treno;
+        FV('man_da').value = ini.da;
+        FV('man_a').value = ini.a;
+      } else {
+        selT.value = CONFIG.ordine[0];
+        fvPopolaPartenze();
+      }
+      if (ini.pp) FV('pp').value = ini.pp;
+      if (ini.ap) FV('ap').value = ini.ap;
+      if (ini.pe) FV('pe').value = ini.pe;
+      if (ini.ae) FV('ae').value = ini.ae;
+
+      fvPopolaOrig();
+      if (ini.orig) {
+        FV('sopp').checked = true;
+        FV('sopp_box').classList.remove('hidden');
+        fvPopolaOrig();
+        if (!Array.from(FV('orig').options).some(o => o.value === ini.orig)) FV('orig').appendChild(new Option(`Treno ${ini.orig}`, ini.orig));
+        FV('orig').value = ini.orig;
+        FV('orig_arr').value = ini.origArr || '';
+      }
+    }
+
+    function fvRaccogli() {
+      const data = FV('data').value;
+      const t = FV('treno').value;
+      const man = t === 'Manuale' || !CONFIG.orari[t];
+      const treno = man ? FV('man_treno').value.trim() : t;
+      const da = man ? FV('man_da').value.trim() : FV('da').value;
+      const a = man ? FV('man_a').value.trim() : FV('a').value;
+      const pp = FV('pp').value, ap = FV('ap').value, pe = FV('pe').value, ae = FV('ae').value;
+      if (!data) return erroreModale('Indica la data.');
+      if (data > oggiIsoLocale()) return erroreModale('La data non può essere nel futuro.');
+      if (!treno || !da || !a) return erroreModale('Compila treno e stazioni.');
+      if (!pp || !ap) return erroreModale('Indica gli orari programmati.');
+      if (!pe || !ae) return erroreModale('Indica gli orari effettivi di partenza e arrivo.');
+      if (normOrario(ae) < normOrario(pe)) return erroreModale("L'arrivo non può precedere la partenza.");
+      const res = { data: dataIt(data), treno, stazPartenza: da, stazArrivo: a, partProg: pp, arrProg: ap, partEff: pe, arrEff: ae, trenoOrig: '', arrProgOrig: '' };
+      if (FV('sopp').checked) {
+        if (!FV('orig_arr').value) return erroreModale("Indica l'arrivo prog. del treno originario.");
+        res.trenoOrig = FV('orig').value;
+        res.arrProgOrig = FV('orig_arr').value;
+      }
+      return res;
+    }
+
+    function apriFormViaggio(titolo, ok, ini) {
+      const p = modale({ titolo, ok, html: htmlFormViaggio(), raccogli: fvRaccogli });
+      fvInizializza(ini);
+      return p;
+    }
+
+    async function aggiungiViaggioUI() {
+      const ini = { data: oggiIsoLocale(), treno: '', da: '', a: '', pp: '', ap: '', pe: '', ae: '', orig: '', origArr: '' };
+      const res = await apriFormViaggio('Aggiungi viaggio', 'Aggiungi', ini);
+      if (!res) return;
+      res.id = genId();
+      toast('Salvataggio...', 'info', 1500);
+      try {
+        await apiCall('aggiungiViaggio', { dati: res });
+        toast('Viaggio aggiunto ✓', 'ok');
+        caricaDashboard();
+        caricaConsiglio();
+      } catch (err) {
+        toast((err && err.message) || 'Aggiunta non riuscita.', 'err', 4500);
+      }
+    }
+
+    async function modificaViaggioUI(i) {
+      const it = storicoDati[i];
+      if (!it) return;
+      const r = it.r;
+      const trenoOrig = r[10] ? String(r[10]).trim() : '';
+      const rit = parseInt(r[8], 10) || 0;
+      const reale = (r[11] !== undefined && r[11] !== '') ? (parseInt(r[11], 10) || 0) : rit;
+      let origArr = '';
+      if (trenoOrig) {
+        // Ricava l'orario programmato originario usando solo i minuti interi di arrivo (senza i secondi)
+        const daCfg = CONFIG.orari[trenoOrig]?.[String(r[9] || '').trim()]?.Destinazioni?.[String(r[2] || '').trim()];
+        if (daCfg) {
+          origArr = daCfg;
+        } else {
+          const minInteriArrivo = minutiDa(r[6]);
+          const mm = (((minInteriArrivo - reale) % 1440) + 1440) % 1440;
+          origArr = `${String(Math.floor(mm / 60)).padStart(2, '0')}:${String(mm % 60).padStart(2, '0')}`;
+        }
+      }
+      const ini = {
+        data: dataIso(r[0]), treno: String(r[1] || '').trim(), da: String(r[9] || '').trim(), a: String(r[2] || '').trim(),
+        pp: normOrario(r[3]).slice(0, 5), ap: normOrario(r[4]).slice(0, 5), pe: normOrario(r[5]), ae: normOrario(r[6]),
+        orig: trenoOrig, origArr
+      };
+      const res = await apriFormViaggio('Modifica viaggio', 'Salva', ini);
+      if (!res) return;
+      toast('Salvataggio...', 'info', 1500);
+      try {
+        await apiCall('modificaViaggio', { riga: it.n, firma: firmaRiga(r), dati: res });
+        toast('Viaggio aggiornato ✓', 'ok');
+        caricaDashboard();
+        caricaConsiglio();
+      } catch (err) {
+        toast((err && err.message) || 'Modifica non riuscita.', 'err', 4500);
+      }
+    }
+
+    async function eliminaViaggioUI(i) {
+      const it = storicoDati[i];
+      if (!it) return;
+      const r = it.r;
+      const ok = await modale({
+        titolo: 'Eliminare il viaggio?',
+        html: `<p>Treno ${esc(r[1])} del ${esc(r[0])} (${esc(r[5])} → ${esc(r[6])}). L'operazione elimina la riga dal foglio e non è reversibile.</p>`,
+        ok: 'Elimina', annulla: 'Annulla', danger: true
+      });
+      if (!ok) return;
+      try {
+        await apiCall('eliminaViaggio', { riga: it.n, firma: firmaRiga(r) });
+        toast('Viaggio eliminato.', 'ok');
+        caricaDashboard();
+      } catch (err) {
+        toast((err && err.message) || 'Eliminazione non riuscita.', 'err', 4500);
+      }
+    }
+
+    /* =====================================================================
+       CONSIGLIO DEL TRENO & AVVIO
+       ===================================================================== */
+    const GIORNI_LUNGHI = ['domenica', 'lunedì', 'martedì', 'mercoledì', 'giovedì', 'venerdì', 'sabato'];
+
+    async function caricaConsiglio() {
+      try {
+        const r = await apiCall('raccomandazioni');
+        renderConsiglio(r);
+      } catch (e) {
+        $('consiglio').classList.add('hidden');
+      }
+    }
+
+    function renderConsiglio(r) {
+      const el = $('consiglio');
+      const fascia = new Date().getHours() < 12 ? 'mattina' : 'pomeriggio';
+      const lista = (r && r.fasce && r.fasce[fascia]) || [];
+      if (!lista.length || lista.every(t => t.n === 0)) { el.classList.add('hidden'); return; }
+      const sub = lista[0].scope === 'giorno'
+        ? `Ultimi 90 giorni, solo ${GIORNI_LUNGHI[r.giorno]}`
+        : 'Ultimi 90 giorni, tutti i giorni';
+      el.innerHTML = `<h3>Treni del ${fascia}</h3><div class="cons-sub">${esc(sub)} · tocca per selezionare</div>` + lista.map((t, i) => `
+        <div class="cons-riga" role="button" tabindex="0" onclick="scegliTreno('${esc(t.treno)}')">
+          <div><b>Treno ${esc(t.treno)}</b> <span class="muted">${esc(t.descrizione)}</span>${i === 0 && t.affidabile ? ' <span class="badge verde">consigliato</span>' : ''}</div>
+          <div class="cons-dati">${t.affidabile
+            ? `medio ${fmt1(t.medio)} min · P90 ${t.p90} · ${t.puntualita}% puntuale · ${t.n} viaggi`
+            : `dati insufficienti (${t.n} viaggi)`}${t.saltati ? ` · saltato ${t.saltati}×` : ''}</div>
+        </div>`).join('');
+      el.classList.remove('hidden');
+    }
+
+    function scegliTreno(cod) {
+      if (timestampPartenza || !CONFIG.orari[cod]) return;
+      $('treno').value = cod;
+      aggiornaPartenze();
+      toast(`Treno ${cod} selezionato`, 'info', 1800);
+    }
+
+    function salvaUI() {
+      try {
+        const attiva = document.querySelector('.view-container.active');
+        localStorage.setItem('ui', JSON.stringify({
+          tab: attiva ? attiva.id.replace('view-', '') : 'viaggio',
+          treno: $('filtro_treno_analisi').value,
+          giorni: $('filtro_giorni_analisi').value
+        }));
+      } catch (e) {}
+    }
+
+    function ripristinaUI() {
+      const ui = leggiJSON('ui', null);
+      if (!ui) return null;
+      const ha = (sel, v) => Array.from(sel.options).some(o => o.value === v);
+      if (ui.treno && ha($('filtro_treno_analisi'), ui.treno)) $('filtro_treno_analisi').value = ui.treno;
+      if (ui.giorni && ha($('filtro_giorni_analisi'), ui.giorni)) $('filtro_giorni_analisi').value = ui.giorni;
+      return ui.tab;
+    }
+
+    window.addEventListener('online', () => { controllaCodaOffline(); sincronizzaViaggio(); });
+    document.addEventListener('visibilitychange', () => {
+      if (!document.hidden) { controllaCodaOffline(); sincronizzaViaggio(); }
+    });
+
+    async function avviaConnessioneServer() {
+      try {
+        const srvCfg = await apiCall('config');
+        if (srvCfg && srvCfg.orari) {
+          CONFIG = srvCfg;
+          popolaTreni();
+          applicaSelezione(selezioneDaStorage());
+          if (CONFIG.tz && !CONFIG.tz.ok) {
+            const el = $('avviso_tz');
+            el.textContent = `Attenzione: fuso orario Apps Script "${CONFIG.tz.script}" invece di "${CONFIG.tz.atteso}".`;
+            el.classList.remove('hidden');
+          }
+        }
+      } catch (e) {}
+
+      controllaCodaOffline();
+      sincronizzaViaggio();
+      caricaDashboard();
+      caricaConsiglio();
+    }
+
+    window.onload = function () {
+      popolaTreni();
+      const tabUI = ripristinaUI();
+      applicaSelezione(selezioneDaStorage());
+
+      timestampPartenza = localStorage.getItem('timestampPartenza');
+      if (timestampPartenza) impostaStatoInViaggio();
+
+      if (timestampPartenza) switchTab('viaggio');
+      else if (['viaggio', 'analisi', 'storico'].includes(tabUI)) switchTab(tabUI);
+
+      const cfg = getApiConfig();
+      if (!cfg.url || !cfg.token) {
+        apriConfigApi();
+      } else {
+        avviaConnessioneServer();
+      }
+    };
+  </script>
+</body>
+</html>
